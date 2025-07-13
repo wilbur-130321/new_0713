@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>잊혀진 방의 멜로디</title>
+    
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; font-family: 'Gothic', 'Malgun Gothic', sans-serif;
+            background-color: #000;
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="%2387CEEB" stroke="%23000" stroke-width="1"/></svg>') 12 12, auto;
+        }
+        .game-scene {
+            position: relative; width: 100%; max-width: 1000px;
+            margin: auto; aspect-ratio: 1280 / 720; display: none;
+        }
+        .game-scene.active { display: block; }
+        .room-background { width: 100%; height: 100%; display: block; object-fit: contain; }
+        .clickable-object {
+            position: absolute; transition: all 0.2s ease-in-out;
+            cursor: pointer; border-radius: 10px;
+        }
+        .clickable-object:hover {
+            background-color: rgba(135, 206, 235, 0.4);
+            box-shadow: 0 0 15px 5px rgba(135, 206, 235, 0.7);
+        }
+        #message-box {
+            position: fixed; bottom: 5%; left: 50%; transform: translateX(-50%);
+            width: 80%; max-width: 800px; padding: 15px;
+            background-color: rgba(0, 0, 0, 0.85); color: #e6e6e6;
+            text-align: center; font-size: 1.5em; border-top: 2px solid #87CEEB;
+            z-index: 1000; opacity: 0; transition: opacity 0.5s; pointer-events: none;
+        }
+        #message-box.show { opacity: 1; }
+        .modal-backdrop {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.95);
+            justify-content: center; align-items: center; z-index: 1001;
+        }
+        .modal-backdrop.show { display: flex; }
+        .modal-content {
+            background-color: #1a1a1a; color: #a0a0a0; padding: 30px;
+            text-align: center; border: 1px solid #444;
+            max-width: 90%; width: 500px;
+        }
+        .modal-content h3 { color: #87CEEB; font-size: 1.8em; margin-top:0; }
+        .modal-content p { line-height: 1.6; font-size: 1.1em; }
+        .modal-content input {
+            width: 80%; padding: 10px; margin: 8px 0; background-color: #000;
+            border: 1px solid #444; color: #87CEEB; font-size: 1.2em; text-align: center;
+        }
+        .modal-content button {
+            padding: 10px 20px; margin-top: 15px; border: 1px solid #87CEEB;
+            color: #87CEEB; background-color: transparent;
+            font-size: 16px; transition: all 0.3s; width: 85%;
+        }
+        .modal-content button:hover { background-color: #87CEEB; color: #000; }
+        #wasd-game-area, #memory-game-display {
+            display: flex; justify-content: center; align-items: center;
+            background-color: #101010; border: 1px solid #333;
+            padding: 20px; margin: 20px auto; width: 80%; height: 100px;
+            border-radius: 10px;
+        }
+        .arrow-key, .memory-key {
+            font-size: 2.5em; color: #444; margin: 0 15px;
+            transition: all 0.2s ease-in-out;
+            width: 60px; height: 60px; line-height: 60px; text-align: center;
+        }
+        .arrow-key.highlight, .memory-key.highlight {
+            color: #87CEEB; transform: scale(1.3); text-shadow: 0 0 15px #87CEEB;
+        }
+        #minigame-status { min-height: 2em; font-weight: bold; }
+        #jumpscare {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 9999; background-size: contain; background-repeat: no-repeat;
+            background-position: center; background-color: #000;
+        }
+        #static-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('https://i.gifer.com/origin/a8/a8f2373838005303a165651a1a477324_w200.gif');
+            opacity: 0.05; z-index: 9998; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="static-overlay"></div>
+    <div id="jumpscare"></div>
+    
+    <div id="user-info-screen" class="modal-backdrop show"><div class="modal-content"><h3>기록</h3><p>당신의 소중한 정보를 기록해주세요.</p><input type="text" id="input-name" placeholder="이름"><button id="start-game-button">기록하고 방으로</button></div></div>
+    <div id="start-screen" class="modal-backdrop"><div class="modal-content"><h3>속삭임</h3><p>이 방은 당신의 잊혀진 기억을 간직하고 있습니다.<br>가장 행복했던 순간을 떠올리면, 문이 열릴지도 모릅니다.<br><br><strong>헤드폰 착용을 권장합니다.</strong></p><button id="continue-button">잠에서 깨어난다</button></div></div>
+
+    <div id="room1-scene" class="game-scene"><img src="https://i.ibb.co/jP0M9N6q/Whisk-storyboard0f0607ec47524694929865ef.jpg" class="room-background"><div class="clickable-object" id="r1-obj-clock" style="top: 19%; left: 8.5%; width: 9%; height: 16%;"></div><div class="clickable-object" id="r1-obj-calendar" style="top: 24%; left: 32.5%; width: 8%; height: 11%;"></div><div class="clickable-object" id="r1-obj-bookshelf" style="top: 41%; left: 56%; width: 20%; height: 8%;"></div><div class="clickable-object" id="r1-obj-door" style="top: 25%; left: 81%; width: 16%; height: 51%;"></div></div>
+    <div id="room2-scene" class="game-scene"><img src="https://i.ibb.co/1f90rsPk/Whisk-storyboardce4a12d70a764256911cb1e9.jpg" class="room-background"><div class="clickable-object" id="r2-obj-windows" style="top: 25%; left: 8%; width: 20%; height: 40%;"></div><div class="clickable-object" id="r2-obj-musicbox" style="top: 30%; left: 75%; width: 12%; height: 25%;"></div><div class="clickable-object" id="r2-obj-door" style="top: 22%; left: 42%; width: 16%; height: 60%;"></div></div>
+
+    <div id="message-box"></div>
+    <div id="quiz-modal" class="modal-backdrop"><div class="modal-content"><h3 id="quiz-title"></h3><p id="quiz-question"></p><input type="text" id="quiz-answer" placeholder="..."><button id="quiz-submit-button">확인</button></div></div>
+    <div id="minigame-modal" class="modal-backdrop"><div class="modal-content"><h3>오르골 돌리기</h3><p>지시에 따라 키를 눌러 오르골 손잡이를 돌리세요.</p><div id="wasd-game-area"><div id="arrow-w" class="arrow-key">W</div><div id="arrow-a" class="arrow-key">A</div><div id="arrow-s" class="arrow-key">S</div><div id="arrow-d" class="arrow-key">D</div></div><p id="minigame-status"></p></div></div>
+    
+    <div id="memory-game-modal" class="modal-backdrop"><div class="modal-content"><h3>기억의 파편</h3><p id="memory-game-instruction">순서를 기억하고 그대로 입력하세요.</p><div id="memory-game-display"><div class="memory-key" id="mem-w">W</div><div class="memory-key" id="mem-a">A</div><div class="memory-key" id="mem-s">S</div><div class="memory-key" id="mem-d">D</div></div><p id="memory-game-status"></p></div></div>
+
+    <audio id="sfx-bgm" src="https://www.myinstants.com/media/sounds/limbo-menu-music.mp3" loop></audio>
+    <audio id="sfx-jumpscare" src="https://www.myinstants.com/media/sounds/fnaf-2-jumpscare-sound.mp3"></audio>
+    <audio id="sfx-whisper" src="https://www.myinstants.com/media/sounds/minecraft-cave-sound-1-hq.mp3"></audio>
+    <audio id="sfx-unlock" src="https://www.myinstants.com/media/sounds/musket-flintlock-sound-effect.mp3"></audio>
+    <audio id="sfx-musicbox" src="https://www.myinstants.com/media/sounds/music-box-tchaikovsky-pas-de-deux.mp3"></audio>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const gameState = { player: {}, hint1: null, hint2: null, minigameCompleted: false };
+            const elements = {
+                scenes: { room1: document.getElementById('room1-scene'), room2: document.getElementById('room2-scene') },
+                userInfoScreen: document.getElementById('user-info-screen'), startScreen: document.getElementById('start-screen'),
+                messageBox: document.getElementById('message-box'), jumpscare: document.getElementById('jumpscare'), staticOverlay: document.getElementById('static-overlay'),
+                minigameModal: { modal: document.getElementById('minigame-modal'), status: document.getElementById('minigame-status'), keys: { w: document.getElementById('arrow-w'), a: document.getElementById('arrow-a'), s: document.getElementById('arrow-s'), d: document.getElementById('arrow-d') } },
+                memoryGameModal: {
+                    modal: document.getElementById('memory-game-modal'),
+                    instruction: document.getElementById('memory-game-instruction'),
+                    status: document.getElementById('memory-game-status'),
+                    keys: { w: document.getElementById('mem-w'), a: document.getElementById('mem-a'), s: document.getElementById('mem-s'), d: document.getElementById('mem-d') }
+                },
+                sounds: { bgm: document.getElementById('sfx-bgm'), scare: document.getElementById('sfx-jumpscare'), whisper: document.getElementById('sfx-whisper'), unlock: document.getElementById('sfx-unlock'), musicbox: document.getElementById('sfx-musicbox') },
+                jumpscareImage: 'https://i.ibb.co/S1Trq6z/Whisk-storyboardc302042134c64551984ab6ea.jpg'
+            };
+            let messageTimeout;
+            
+            function showMessage(text, duration = 4000) { clearTimeout(messageTimeout); elements.messageBox.textContent = text; elements.messageBox.classList.add('show'); messageTimeout = setTimeout(() => elements.messageBox.classList.remove('show'), duration); }
+            function triggerScare() { elements.jumpscare.style.backgroundImage = `url(${elements.jumpscareImage})`; elements.jumpscare.style.display = 'block'; elements.sounds.scare.play(); setTimeout(() => elements.jumpscare.style.display = 'none', 400); }
+            function changeRoom(current, next) { elements.scenes[`room${current}`].classList.remove('active'); elements.scenes[`room${next}`].classList.add('active'); }
+            
+            function showQuiz(title, question, onSubmitCallback) {
+                const quizModal = document.getElementById('quiz-modal');
+                const titleEl = document.getElementById('quiz-title');
+                const questionEl = document.getElementById('quiz-question');
+                const answerEl = document.getElementById('quiz-answer');
+                let submitBtn = document.getElementById('quiz-submit-button');
+                titleEl.textContent = title; questionEl.textContent = question; answerEl.value = ''; quizModal.classList.add('show'); answerEl.focus();
+                const newSubmitBtn = submitBtn.cloneNode(true);
+                submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
+                newSubmitBtn.addEventListener('click', () => { onSubmitCallback(answerEl.value.trim()); });
+            }
+
+            // ★★★ 난이도 조절된 기억력 게임 ★★★
+            const memoryGame = {
+                gameActive: false, playerTurn: false, level: 1, maxLevel: 2, // 2 라운드로 축소
+                sequence: [], playerSequence: [],
+                difficulty: { 1: 3, 2: 5 }, // 기억할 키 개수 감소 (3개 -> 5개)
+                start: function() {
+                    this.level = 1; this.gameActive = true;
+                    elements.memoryGameModal.modal.classList.add('show');
+                    this.nextLevel();
+                },
+                nextLevel: function() {
+                    this.playerSequence = []; this.playerTurn = false;
+                    this.generateSequence();
+                    elements.memoryGameModal.status.textContent = `[ ${this.level} 단계 ] 순서를 외우세요...`;
+                    elements.memoryGameModal.instruction.textContent = "기억의 파편이 머릿속을 스쳐지나갑니다.";
+                    setTimeout(() => this.showSequence(), 2000);
+                },
+                generateSequence: function() {
+                    const keys = ['w', 'a', 's', 'd'];
+                    this.sequence = [];
+                    for (let i = 0; i < this.difficulty[this.level]; i++) {
+                        this.sequence.push(keys[Math.floor(Math.random() * keys.length)]);
+                    }
+                },
+                showSequence: function() {
+                    let i = 0;
+                    // 키 표시 간격 및 시간 조절 (조금 더 길게)
+                    const interval = setInterval(() => {
+                        if (i >= this.sequence.length) {
+                            clearInterval(interval);
+                            this.playerTurn = true;
+                            elements.memoryGameModal.status.textContent = `[ ${this.level} 단계 ] 본 대로 입력하세요.`;
+                            return;
+                        }
+                        const key = this.sequence[i];
+                        elements.memoryGameModal.keys[key].classList.add('highlight');
+                        setTimeout(() => { elements.memoryGameModal.keys[key].classList.remove('highlight'); }, 500);
+                        i++;
+                    }, 750);
+                },
+                playerInput: function(key) {
+                    if (!this.gameActive || !this.playerTurn) return;
+                    this.playerSequence.push(key);
+                    const currentStep = this.playerSequence.length - 1;
+                    
+                    if (this.sequence[currentStep] !== key) {
+                        this.end(false);
+                        return;
+                    }
+
+                    elements.memoryGameModal.keys[key].classList.add('highlight');
+                    setTimeout(() => { elements.memoryGameModal.keys[key].classList.remove('highlight'); }, 200);
+
+                    if (this.playerSequence.length === this.sequence.length) {
+                        this.playerTurn = false;
+                        if (this.level >= this.maxLevel) {
+                            this.end(true);
+                        } else {
+                            this.level++;
+                            showMessage("기억의 조각이 맞춰지고 있다...");
+                            setTimeout(() => this.nextLevel(), 1500);
+                        }
+                    }
+                },
+                end: function(success) {
+                    this.gameActive = false;
+                    elements.memoryGameModal.modal.classList.remove('show');
+                    if (success) {
+                        showMessage("흩어진 기억 속에서 선명한 숫자를 보았다... [ 625 ]", 5000);
+                        gameState.hint2 = '625';
+                    } else {
+                        triggerScare();
+                        showMessage("기억이 뒤엉켰다! 끔찍한 형상이 스쳐지나간다.");
+                    }
+                }
+            };
+            
+            const wasdGame = { 
+                windingSequence: ['w', 'a', 's', 'd'], totalRounds: 10, currentStep: 0, roundsCompleted: 0, gameActive: false,
+                start: function() { this.gameActive = true; this.currentStep = 0; this.roundsCompleted = 0; elements.minigameModal.modal.classList.add('show'); this.updateHighlight(); },
+                updateHighlight: function() { Object.values(elements.minigameModal.keys).forEach(keyEl => keyEl.classList.remove('highlight')); const targetKey = this.windingSequence[this.currentStep]; elements.minigameModal.keys[targetKey].classList.add('highlight'); elements.minigameModal.status.textContent = `${this.roundsCompleted + 1} / ${this.totalRounds} 바퀴 - 다음 키: [ ${targetKey.toUpperCase()} ]`; },
+                playerInput: function(key) { if (!this.gameActive) return; const targetKey = this.windingSequence[this.currentStep]; if (key === targetKey) { this.currentStep++; if (this.currentStep >= this.windingSequence.length) { this.currentStep = 0; this.roundsCompleted++; } if (this.roundsCompleted >= this.totalRounds) { this.end(true); } else { this.updateHighlight(); } } else { this.end(false); } },
+                end: function(success) { this.gameActive = false; elements.minigameModal.modal.classList.remove('show'); if (success) { showMessage("멜로디를 완성하자, 오르골 뚜껑이 조용히 열렸다."); gameState.minigameCompleted = true; } else { triggerScare(); showMessage("손잡이를 잘못 돌렸다! 오르골에서 기분 나쁜 소리가 난다."); } }
+            };
+            
+            window.addEventListener('keydown', (e) => {
+                const key = e.key.toLowerCase();
+                if (!['w', 'a', 's', 'd'].includes(key)) return;
+                
+                if (wasdGame.gameActive) {
+                    wasdGame.playerInput(key);
+                } else if (memoryGame.gameActive) {
+                    memoryGame.playerInput(key);
+                }
+            });
+
+            document.getElementById('start-game-button').addEventListener('click', () => { const name = document.getElementById('input-name').value.trim(); if (!name) { alert('당신의 소중한 이름을 기록해주세요.'); return; } gameState.player.name = name; elements.userInfoScreen.classList.remove('show'); elements.startScreen.classList.add('show'); });
+            document.getElementById('continue-button').addEventListener('click', () => { elements.startScreen.style.display = 'none'; elements.sounds.bgm.volume = 0.5; elements.sounds.bgm.play(); elements.staticOverlay.style.display = 'block'; elements.scenes.room1.classList.add('active'); showMessage(`${gameState.player.name}의 옛 방... 하지만 어딘가 낯설다.`); });
+
+            document.getElementById('r1-obj-clock').addEventListener('click', () => {
+                if (gameState.hint1) { showMessage("멈춘 시계는 4시를 가리키고 있다."); return; }
+                showMessage("이건... 아버지가 고쳐주셨던 괘종시계. 멈춰버렸다.");
+                setTimeout(() => { elements.sounds.whisper.play(); showMessage("시곗바늘이 저절로 움직이더니... 숫자 [ 4 ]를 가리킨다."); gameState.hint1 = '4'; }, 2000);
+            });
+            
+            document.getElementById('r1-obj-calendar').addEventListener('click', () => {
+                if (gameState.hint2) { showMessage("낡은 달력... 6월 25일에 동그라미가 쳐져있다."); return; }
+                showMessage("달력에 손을 대자, 머릿속으로 알 수 없는 기억의 파편이 스쳐 지나간다...");
+                setTimeout(() => { memoryGame.start(); }, 1500);
+            });
+
+            document.getElementById('r1-obj-bookshelf').addEventListener('click', () => { showMessage("먼지 쌓인 책들. '시간은 날짜보다 먼저 흐른다'고 쓰인 낡은 메모가 있다."); });
+            document.getElementById('r1-obj-door').addEventListener('click', () => {
+                showQuiz('잠긴 방문', '행복했던 기억의 조각을 맞춰보세요.', (answer) => {
+                    const quizModal = document.getElementById('quiz-modal');
+                    if (answer === '4625') {
+                        if (gameState.hint1 && gameState.hint2) { elements.sounds.unlock.play(); showMessage('문이 열렸다. 익숙한 복도가 보인다.'); quizModal.classList.remove('show'); changeRoom(1, 2); }
+                        else { showMessage("아직... 모든 기억이 떠오르지 않았어."); triggerScare(); }
+                    } else { showMessage("아니야... 그 날이 아니야."); }
+                });
+            });
+
+            document.getElementById('r2-obj-windows').addEventListener('click', () => { showMessage("창밖은 고요하다. 어릴 적 보던 풍경 그대로다."); });
+            document.getElementById('r2-obj-door').addEventListener('click', () => { showMessage("집 현관문이다. 하지만 문이 열리지 않는다."); setTimeout(() => showMessage("문득, 저쪽의 낡은 오르골에서 소리가 들리는 것 같다..."), 1500); });
+            document.getElementById('r2-obj-musicbox').addEventListener('click', () => {
+                if (gameState.minigameCompleted) {
+                    showQuiz('오르골의 속삭임', '가장 소중했던 것을 여기에 담아주세요.', (answer) => {
+                        const quizModal = document.getElementById('quiz-modal');
+                        if (answer.toLowerCase() === gameState.player.name.toLowerCase()) {
+                            quizModal.classList.remove('show');
+                            elements.sounds.bgm.pause();
+                            elements.sounds.musicbox.play();
+                            elements.staticOverlay.style.display = 'none';
+                            elements.scenes.room2.style.transition = 'opacity 2s';
+                            elements.scenes.room2.style.opacity = '0';
+                            
+                            setTimeout(() => {
+                                document.body.innerHTML = `
+                                <div style="width:100%; height:100%; background-image: url('https://i.ibb.co/Y7Bv9FKW/Whisk-0f2b5929cb.jpg'); background-size: cover; background-position: center; display: flex; justify-content: center; align-items: center; text-align: center;">
+                                    <div style="background-color: rgba(0, 0, 0, 0.6); color: #fff; padding: 20px 40px; border-radius: 10px; font-size: 2.5em; line-height: 1.5;">
+                                        ${gameState.player.name}은/는 따뜻한 아침 햇살과 함께<br>추억 속에서 평화롭게 눈을 떴습니다.
+                                    </div>
+                                </div>`;
+                            }, 2500);
+                        } else {
+                            showMessage("오르골이 침묵한다. 이게 아닌 것 같다.");
+                        }
+                    });
+                } else {
+                    showMessage("오래된 오르골을 만지자, 희미한 멜로디가 머릿속에 떠오른다...");
+                    wasdGame.start();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
